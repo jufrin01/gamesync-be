@@ -10,7 +10,7 @@ import project.gamesync.dto.response.JwtResponse;
 import project.gamesync.dto.response.MessageResponse;
 import project.gamesync.service.AuthService;
 
-@CrossOrigin(origins = "*", maxAge = 3600)
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -32,6 +32,7 @@ public class AuthController {
             authService.registerUser(signUpRequest);
             return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
         } catch (Exception e) {
+            // Mengambil pesan error dari service (misal: "Error: Username is already taken!")
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
         }
     }

@@ -13,18 +13,42 @@ public class ChatService {
     @Autowired
     ChatMessageRepository chatMessageRepository;
 
-    // Simpan Pesan ke Database
+    /**
+     * Menyimpan pesan baru ke database PostgreSQL.
+     * Digunakan oleh REST API (/api/chat/send) dan WebSocket.
+     */
     public ChatMessage saveMessage(ChatMessage message) {
         return chatMessageRepository.save(message);
     }
 
-    // Ambil History Chat Global
-    public List<ChatMessage> getGlobalChatHistory() {
+    /**
+     * Mengambil semua pesan global (tanpa guildId).
+     * Nama method disesuaikan agar sinkron dengan ChatController.getChatHistory().
+     */
+    public List<ChatMessage> getAllMessages() {
+        // Mengambil pesan yang guildId-nya null dan diurutkan berdasarkan waktu pembuatan
         return chatMessageRepository.findByGuildIdIsNullOrderByCreatedAtAsc();
     }
 
-    // Ambil History Chat Guild Tertentu
-    public List<ChatMessage> getGuildChatHistory(Long guildId) {
+    /**
+     * Mengambil riwayat pesan berdasarkan ID Guild/Squad tertentu.
+     * Digunakan untuk fitur chat khusus anggota guild.
+     */
+    public List<ChatMessage> getMessagesByGuild(Long guildId) {
         return chatMessageRepository.findByGuildIdOrderByCreatedAtAsc(guildId);
+    }
+
+    /**
+     * Alias untuk getGlobalChatHistory jika masih dibutuhkan oleh controller lama.
+     */
+    public List<ChatMessage> getGlobalChatHistory() {
+        return getAllMessages();
+    }
+
+    /**
+     * Alias untuk getGuildChatHistory jika masih dibutuhkan oleh controller lama.
+     */
+    public List<ChatMessage> getGuildChatHistory(Long guildId) {
+        return getMessagesByGuild(guildId);
     }
 }

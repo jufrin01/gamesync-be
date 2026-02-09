@@ -12,9 +12,14 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration; // TAMBAHKAN INI
+import org.springframework.web.cors.CorsConfigurationSource; // TAMBAHKAN INI
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource; // TAMBAHKAN INI
 import project.gamesync.security.jwt.AuthEntryPointJwt;
 import project.gamesync.security.jwt.AuthTokenFilter;
 import project.gamesync.security.services.UserDetailsServiceImpl;
+
+import java.util.Arrays; // TAMBAHKAN INI
 
 @Configuration
 public class SecurityConfig {
@@ -28,6 +33,20 @@ public class SecurityConfig {
     @Bean
     public AuthTokenFilter authenticationJwtTokenFilter() {
         return new AuthTokenFilter();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        // Izinkan asal dari port React kamu (biasanya 3000)
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 
     @Bean
@@ -50,20 +69,15 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.disable())
+        // PENTING: Panggil .cors() dan sambungkan ke bean corsConfigurationSource()
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.disable())
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Izinkan akses ke Auth (Login/Register)
                         .requestMatchers("/api/auth/**").permitAll()
-
-                        // Izinkan akses ke Swagger UI (PENTING BIAR GAK KENA 401)
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-
-                        // Izinkan WebSocket Handshake
                         .requestMatchers("/ws/**").permitAll()
-
-                        // Sisanya harus login
                         .anyRequest().authenticated()
                 );
 

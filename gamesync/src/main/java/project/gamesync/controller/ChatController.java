@@ -1,54 +1,67 @@
 package project.gamesync.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.*;
 import project.gamesync.entity.ChatMessage;
 import project.gamesync.service.ChatService;
 
 import java.util.List;
 
-@Controller // Pakai @Controller karena ada WebSocket
+@Controller
+@RequestMapping("/api/chat")
 public class ChatController {
 
     @Autowired
-    ChatService chatService;
+    private ChatService chatService;
 
-    // --- WEBSOCKET HANDLERS ---
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
 
-    // 1. Kirim Pesan: /app/chat.sendMessage -> Disebar ke /topic/public
+    // --- 1. REST API: AMBIL RIWAYAT PESAN ---
+    @GetMapping("/history")
+    @ResponseBody
+    public List<ChatMessage> getChatHistory(@RequestParam(required = false) Long guildId) {
+        if (guildId != null) {
+            return chatService.getMessagesByGuild(guildId);
+        }
+        return chatService.getAllMessages(); // Ambil semua chat umum
+    }
+
+    // --- 2. REST API: KIRIM PESAN ---
+    @PostMapping("/send")
+    @ResponseBody
+    public ResponseEntity<?> sendMessageRest(@RequestBody ChatMessage chatMessage) {
+        // Simpan ke database
+        ChatMessage savedMessage = chatService.saveMessage(chatMessage);
+
+        // Broadcast ke semua user via WebSocket (/topic/public)
+        messagingTemplate.convertAndSend("/topic/public", savedMessage);
+
+        return ResponseEntity.ok(savedMessage);
+    }
+
+    // --- 3. WEBSOCKET: HANDLERS ---
+
+    // Broadcast pesan yang dikirim langsung lewat socket
     @MessageMapping("/chat.sendMessage")
     @SendTo("/topic/public")
     public ChatMessage sendMessage(@Payload ChatMessage chatMessage) {
-        // Simpan ke database sebelum disebar ke user lain
         return chatService.saveMessage(chatMessage);
     }
 
-    // 2. User Join: /app/chat.addUser
+    // Notifikasi user bergabung
     @MessageMapping("/chat.addUser")
     @SendTo("/topic/public")
     public ChatMessage addUser(@Payload ChatMessage chatMessage,
                                SimpMessageHeaderAccessor headerAccessor) {
-        // Simpan username di session WebSocket agar bisa dipakai saat disconnect
         headerAccessor.getSessionAttributes().put("username", chatMessage.getSenderId());
         return chatMessage;
-    }
-
-    // --- REST API HANDLERS (Untuk History) ---
-
-    // Endpoint: GET /api/chat/history
-    @GetMapping("/api/chat/history")
-    @ResponseBody // Wajib pakai ini karena class-nya @Controller
-    public List<ChatMessage> getChatHistory(@RequestParam(required = false) Long guildId) {
-        if (guildId != null) {
-            return chatService.getGuildChatHistory(guildId);
-        }
-        return chatService.getGlobalChatHistory();
     }
 }
