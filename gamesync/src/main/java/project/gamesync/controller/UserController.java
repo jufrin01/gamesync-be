@@ -2,53 +2,65 @@ package project.gamesync.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import project.gamesync.dto.request.UpdateProfileRequest;
 import project.gamesync.entity.User;
-import project.gamesync.entity.UserStats;
+
 import project.gamesync.security.services.UserDetailsImpl;
 import project.gamesync.service.UserService;
 
-import java.util.Optional;
-
-@CrossOrigin(origins = "*", maxAge = 3600)
+//@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
 
     @Autowired
-    UserService userService;
+    private UserService userService;
 
-    // Helper ambil ID User Login
-    private Long getCurrentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        return userDetails.getId();
-    }
-
-    // Endpoint: GET /api/users/me (Profil Saya)
+    // --- 1. GET CURRENT PROFILE ---
+    // Endpoint: GET /api/users/me
     @GetMapping("/me")
-    public ResponseEntity<?> getMyProfile() {
-        Long userId = getCurrentUserId();
-        Optional<User> user = userService.findById(userId);
-        return user.map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<?> getCurrentUser() {
+        try {
+            // Ambil ID User dari Token JWT
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+            // Panggil Service untuk ambil data lengkap dari DB (termasuk bio, level, dll)
+            User user = userService.getUserById(userDetails.getId());
+
+            return ResponseEntity.ok(user);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error fetching profile: " + e.getMessage());
+        }
     }
 
-    // Endpoint: GET /api/users/me/stats (Stats RPG Saya)
-    @GetMapping("/me/stats")
-    public ResponseEntity<UserStats> getMyStats() {
-        Long userId = getCurrentUserId();
-        UserStats stats = userService.getUserStats(userId);
-        return ResponseEntity.ok(stats);
+    // --- 2. UPDATE PROFILE ---
+    // Endpoint: PUT /api/users/{id}
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateUser(@PathVariable Long id,
+                                        @RequestBody UpdateProfileRequest request) {
+        try {
+            // Ambil ID User yang sedang login (Requester)
+            UserDetailsImpl currentUser = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            Long requesterId = currentUser.getId();
+
+            // Serahkan semua logika validasi & update ke Service
+            User updatedUser = userService.updateUserProfile(id, requesterId, request);
+
+            return ResponseEntity.ok(updatedUser);
+
+        } catch (RuntimeException e) {
+            // Tangkap error validasi dari Service (misal: Edit punya orang lain)
+            return ResponseEntity.status(403).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("An error occurred while updating profile.");
+        }
     }
 
-    // Endpoint: POST /api/users/me/xp (Nambah XP - Buat test naik level)
-    @PostMapping("/me/xp")
-    public ResponseEntity<?> addXp(@RequestParam Long amount) {
-        Long userId = getCurrentUserId();
-        userService.addXp(userId, amount);
-        return ResponseEntity.ok("XP Added!");
+
+    @GetMapping("/{id}/stats")
+    public ResponseEntity<?> getUserStats(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserStats(id));
     }
 }

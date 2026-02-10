@@ -10,6 +10,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import project.gamesync.entity.ChatMessage;
+import project.gamesync.dto.response.ChatMessageResponse;
 import project.gamesync.service.ChatService;
 
 import java.util.List;
@@ -24,37 +25,41 @@ public class ChatController {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
-    // --- 1. REST API: AMBIL RIWAYAT PESAN ---
+    // --- 1. REST API: AMBIL RIWAYAT PESAN (Updated) ---
     @GetMapping("/history")
     @ResponseBody
-    public List<ChatMessage> getChatHistory(@RequestParam(required = false) Long guildId) {
+    public ResponseEntity<List<ChatMessageResponse>> getChatHistory(@RequestParam(required = false) Long guildId) {
         if (guildId != null) {
-            return chatService.getMessagesByGuild(guildId);
+            return ResponseEntity.ok(chatService.getMessagesByGuild(guildId));
         }
-        return chatService.getAllMessages(); // Ambil semua chat umum
+        return ResponseEntity.ok(chatService.getAllMessages());
     }
 
-    // --- 2. REST API: KIRIM PESAN ---
+    // --- 2. REST API: KIRIM PESAN (Updated) ---
     @PostMapping("/send")
     @ResponseBody
     public ResponseEntity<?> sendMessageRest(@RequestBody ChatMessage chatMessage) {
-        // Simpan ke database
-        ChatMessage savedMessage = chatService.saveMessage(chatMessage);
+        // Simpan ke database (Service sudah mengembalikan DTO lengkap)
+        ChatMessageResponse savedMessage = chatService.saveMessage(chatMessage);
 
         // Broadcast ke semua user via WebSocket (/topic/public)
+        // Frontend yang subscribe ke socket ini akan langsung dapat data lengkap (nama, avatar)
         messagingTemplate.convertAndSend("/topic/public", savedMessage);
 
         return ResponseEntity.ok(savedMessage);
     }
 
-    // --- 3. WEBSOCKET: HANDLERS ---
+    // --- 3. WEBSOCKET: HANDLERS (Updated) ---
 
     // Broadcast pesan yang dikirim langsung lewat socket
     @MessageMapping("/chat.sendMessage")
     @SendTo("/topic/public")
-    public ChatMessage sendMessage(@Payload ChatMessage chatMessage) {
+    public ChatMessageResponse sendMessage(@Payload ChatMessage chatMessage) {
+        // Service sekarang mengembalikan ChatMessageResponse
         return chatService.saveMessage(chatMessage);
     }
+
+
 
     // Notifikasi user bergabung
     @MessageMapping("/chat.addUser")

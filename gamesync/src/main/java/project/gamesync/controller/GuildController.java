@@ -2,59 +2,122 @@ package project.gamesync.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import project.gamesync.dto.response.MessageResponse;
+import project.gamesync.dto.request.GuildRequest;
 import project.gamesync.entity.Guild;
+import project.gamesync.entity.User;
 import project.gamesync.security.services.UserDetailsImpl;
 import project.gamesync.service.GuildService;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/guilds")
 public class GuildController {
 
-    @Autowired
-    GuildService guildService;
+    @Autowired private GuildService guildService;
 
-    // Helper untuk mengambil User ID dari Token JWT yang sedang login
-    private Long getCurrentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        return userDetails.getId();
-    }
-
-    // Endpoint: GET /api/guilds (Lihat semua guild)
-    @GetMapping
-    public List<Guild> getAllGuilds() {
-        return guildService.getAllGuilds();
-    }
-
-    // Endpoint: POST /api/guilds (Buat Guild)
-    // Body: { "name": "NamaGuild", "description": "Deskripsi" }
-    @PostMapping
-    public ResponseEntity<?> createGuild(@RequestBody Guild guildRequest) {
+    // --- CREATE GUILD ---
+    @PostMapping("/create")
+    public ResponseEntity<?> createGuild(@RequestBody GuildRequest request) {
+        UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         try {
-            Long userId = getCurrentUserId();
-            Guild newGuild = guildService.createGuild(guildRequest.getName(), guildRequest.getDescription(), userId);
-            return ResponseEntity.ok(newGuild);
+            Guild guild = guildService.createGuild(user.getId(), request);
+            return ResponseEntity.ok(guild);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    // Endpoint: POST /api/guilds/{id}/join (Gabung Guild)
-    @PostMapping("/{guildId}/join")
-    public ResponseEntity<?> joinGuild(@PathVariable Long guildId) {
+    // --- GET MY GUILD (Dashboard) ---
+    @GetMapping("/my")
+    public ResponseEntity<?> getMyGuild() {
+        UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        if (user.getGuildId() == null) {
+            return ResponseEntity.noContent().build(); // 204 No Content jika belum punya guild
+        }
+
+        Guild guild = guildService.getGuildById(user.getGuildId());
+        List<User> members = guildService.getGuildMembers(user.getGuildId());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("info", guild);
+        response.put("members", members);
+
+        return ResponseEntity.ok(response);
+    }
+
+    // --- ADD MEMBER ---
+    @PostMapping("/add")
+    public ResponseEntity<?> addMember(@RequestBody GuildRequest request) {
+
+        UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getPrincipal();
         try {
-            Long userId = getCurrentUserId();
-            guildService.joinGuild(guildId, userId);
-            return ResponseEntity.ok(new MessageResponse("Successfully joined guild!"));
+            guildService.addMember(user.getId(), request.getTargetUserId());
+            return ResponseEntity.ok("Member recruited successfully!");
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // --- KICK MEMBER ---
+    @PostMapping("/kick")
+    public ResponseEntity<?> kickMember(@RequestBody GuildRequest request) {
+        UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        try {
+            guildService.kickMember(user.getId(), request.getTargetUserId());
+            return ResponseEntity.ok("Member removed successfully!");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/all")
+    public ResponseEntity<?> getAllGuilds() {
+        return ResponseEntity.ok(guildService.getAllGuilds());
+    }
+
+    // User Apply ke Guild
+    @PostMapping("/apply/{guildId}")
+    public ResponseEntity<?> applyToGuild(@PathVariable Long guildId) {
+        UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        try {
+            guildService.applyToGuild(user.getId(), guildId);
+            return ResponseEntity.ok("Application sent to the Guild Leader.");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // Leader lihat siapa yang apply
+    @GetMapping("/applications")
+    public ResponseEntity<?> getApplications() {
+        UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        try {
+            return ResponseEntity.ok(guildService.getPendingApplications(user.getId()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // Leader Approve/Reject
+    @PostMapping("/application/{appId}/{action}") // action: approve or reject
+    public ResponseEntity<?> handleApplication(@PathVariable Long appId,
+                                               @PathVariable String action) {
+        UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        try {
+            boolean isApproved = action.equalsIgnoreCase("approve");
+            guildService.handleApplication(user.getId(), appId, isApproved);
+            return ResponseEntity.ok("Application " + (isApproved ? "Approved" : "Rejected"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 }

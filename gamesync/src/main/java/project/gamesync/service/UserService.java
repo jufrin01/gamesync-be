@@ -2,8 +2,11 @@ package project.gamesync.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import project.gamesync.dto.request.UpdateProfileRequest;
 import project.gamesync.entity.User;
 import project.gamesync.entity.UserStats;
+
 import project.gamesync.repository.UserRepository;
 import project.gamesync.repository.UserStatsRepository;
 
@@ -18,41 +21,79 @@ public class UserService {
     @Autowired
     UserStatsRepository userStatsRepository;
 
+    // --- HELPER: Mengambil User atau Error ---
+    public User getUserById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Error: User not found with ID: " + userId));
+    }
+
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
     }
 
-    public Optional<User> findById(Long id) {
-        return userRepository.findById(id);
+    // --- FITUR 1: UPDATE PROFILE (Settings Page) ---
+    @Transactional
+    public User updateUserProfile(Long targetUserId, Long requesterId, UpdateProfileRequest request) {
+        // 1. Validasi Keamanan: Pastikan yang edit adalah pemilik akun
+        if (!targetUserId.equals(requesterId)) {
+            throw new RuntimeException("Unauthorized: You can only update your own profile!");
+        }
+
+        // 2. Ambil User
+        User user = getUserById(targetUserId);
+
+        // 3. Update Field (Hanya jika data dikirim)
+        if (request.getUsername() != null && !request.getUsername().isEmpty()) {
+            user.setUsername(request.getUsername());
+        }
+
+        if (request.getBio() != null) {
+            user.setBio(request.getBio());
+        }
+
+        if (request.getAvatarUrl() != null) {
+            user.setAvatarUrl(request.getAvatarUrl());
+        }
+
+        // 4. Simpan ke Database
+        return userRepository.save(user);
     }
 
-    // Ambil Statistik User (XP, Level, Quests)
+    // --- FITUR 2: GAMIFICATION (XP & LEVEL) ---
     public UserStats getUserStats(Long userId) {
+        // Cari stats user, jika belum ada buatkan baru (Lazy Init)
         return userStatsRepository.findById(userId)
                 .orElseGet(() -> {
-                    // Fallback jika data stats tidak ditemukan (Harusnya tidak terjadi jika register benar)
                     UserStats newStats = new UserStats();
                     newStats.setUserId(userId);
+                    newStats.setTotalXp(0L);
                     return userStatsRepository.save(newStats);
                 });
     }
 
-    // Update Level User (Contoh logika sederhana)
+    @Transactional
     public void addXp(Long userId, Long xpAmount) {
         UserStats stats = getUserStats(userId);
-        stats.setTotalXp(stats.getTotalXp() + xpAmount);
 
-        // Logika naik level (Misal: tiap 1000 XP naik 1 level)
-        /* if (stats.getTotalXp() >= 1000) {
-            // Update Level di tabel User
-            User user = userRepository.findById(userId).orElse(null);
-            if (user != null) {
-                user.setLevel(user.getLevel() + 1);
-                userRepository.save(user);
-            }
-        }
-        */
-
+        // 1. Tambah XP
+        long currentXp = stats.getTotalXp() != null ? stats.getTotalXp() : 0L;
+        long newXp = currentXp + xpAmount;
+        stats.setTotalXp(newXp);
         userStatsRepository.save(stats);
+
+        // 2. Hitung Level Baru
+        // Rumus: Level 1 (Base) + (TotalXP / 1000)
+        // Contoh: 0 XP = Lv 1, 1050 XP = Lv 2, 5000 XP = Lv 6
+        int newLevel = 1 + (int) (newXp / 1000);
+
+        // 3. Update Level User jika naik
+        User user = getUserById(userId);
+        if (newLevel > user.getLevel()) {
+            user.setLevel(newLevel);
+            userRepository.save(user);
+
+            // TODO: Nantinya bisa kirim notifikasi WebSocket "LEVEL UP!" di sini
+            System.out.println("User " + user.getUsername() + " leveled up to " + newLevel + "!");
+        }
     }
 }

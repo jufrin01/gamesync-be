@@ -1,6 +1,7 @@
 package project.gamesync.security.services;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -14,29 +15,40 @@ import java.util.Objects;
 public class UserDetailsImpl implements UserDetails {
     private static final long serialVersionUID = 1L;
 
+    @Getter
     private Long id;
 
     private String username;
 
+    @Getter
     private String email;
 
-    @JsonIgnore // Password tidak boleh ikut saat object ini diubah jadi JSON (ke Frontend)
+    @JsonIgnore
     private String password;
+
+    @Getter
+    private Long guildId; // Menyimpan ID Guild user
+
+    @Getter
+    private Integer level; // Menyimpan Level user
+    // --------------------------------------------------
 
     private Collection<? extends GrantedAuthority> authorities;
 
     public UserDetailsImpl(Long id, String username, String email, String password,
+                           Long guildId, Integer level,
                            Collection<? extends GrantedAuthority> authorities) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
+        this.guildId = guildId;
+        this.level = level;
         this.authorities = authorities;
     }
 
-    // Static method untuk membangun UserDetailsImpl dari object User Entity
     public static UserDetailsImpl build(User user) {
-        // Mengubah Role Enum (USER, ADMIN) menjadi GrantedAuthority agar dimengerti Spring Security
+        // Mengubah Role (Enum) menjadi Authority Spring Security
         List<GrantedAuthority> authorities = Collections.singletonList(
                 new SimpleGrantedAuthority(user.getRole().name())
         );
@@ -46,20 +58,15 @@ public class UserDetailsImpl implements UserDetails {
                 user.getUsername(),
                 user.getEmail(),
                 user.getPassword(),
-                authorities);
+                user.getGuildId(), // Ambil Guild ID dari Entity User
+                user.getLevel(),   // Ambil Level dari Entity User
+                authorities
+        );
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return authorities;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getEmail() {
-        return email;
     }
 
     @Override
@@ -72,7 +79,7 @@ public class UserDetailsImpl implements UserDetails {
         return username;
     }
 
-    // --- Status Akun (Kita buat true semua untuk sekarang) ---
+    // --- Status Akun (Default True semua agar akun aktif) ---
     @Override
     public boolean isAccountNonExpired() {
         return true;
@@ -93,13 +100,17 @@ public class UserDetailsImpl implements UserDetails {
         return true;
     }
 
+    // --- Equals & HashCode (Penting untuk Session Management) ---
     @Override
     public boolean equals(Object o) {
-        if (this == o)
-            return true;
-        if (o == null || getClass() != o.getClass())
-            return false;
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
         UserDetailsImpl user = (UserDetailsImpl) o;
         return Objects.equals(id, user.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 }
