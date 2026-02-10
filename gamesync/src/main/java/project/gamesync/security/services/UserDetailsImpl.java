@@ -79,6 +79,8 @@ public class UserDetailsImpl implements UserDetails {
         return username;
     }
 
+
+
     // --- Status Akun (Default True semua agar akun aktif) ---
     @Override
     public boolean isAccountNonExpired() {
@@ -99,6 +101,8 @@ public class UserDetailsImpl implements UserDetails {
     public boolean isEnabled() {
         return true;
     }
+
+
 
     // --- Equals & HashCode (Penting untuk Session Management) ---
     @Override

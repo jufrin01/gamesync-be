@@ -12,14 +12,15 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration; // TAMBAHKAN INI
-import org.springframework.web.cors.CorsConfigurationSource; // TAMBAHKAN INI
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource; // TAMBAHKAN INI
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import project.gamesync.security.jwt.AuthEntryPointJwt;
 import project.gamesync.security.jwt.AuthTokenFilter;
 import project.gamesync.security.services.UserDetailsServiceImpl;
 
-import java.util.Arrays; // TAMBAHKAN INI
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -35,13 +36,21 @@ public class SecurityConfig {
         return new AuthTokenFilter();
     }
 
+    // --- PERBAIKAN CORS CONFIGURATION ---
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Izinkan asal dari port React kamu (biasanya 3000)
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With"));
+
+        // Gunakan allowedOriginPatterns("*") agar bisa akses dari semua IP/Domain
+        // Ini solusi untuk error "allowedOrigins cannot contain *" saat allowCredentials=true
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+
+        // Izinkan semua headers agar tidak ada masalah 'Unauthorized' karena header hilang
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+
+        // Penting untuk Cookies/Auth Header
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -69,7 +78,6 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        // PENTING: Panggil .cors() dan sambungkan ke bean corsConfigurationSource()
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
@@ -77,7 +85,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll() // Izinkan WebSocket handshake
                         .anyRequest().authenticated()
                 );
 

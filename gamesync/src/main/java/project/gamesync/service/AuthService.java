@@ -55,15 +55,19 @@ public class AuthService {
 
         // 5. Ambil data User asli dari DB untuk info tambahan (guildId, role)
         User user = userRepository.findById(userDetails.getId()).orElse(null);
+
         String role = (user != null) ? user.getRole().name() : "USER";
         Long guildId = (user != null) ? user.getGuildId() : null;
+        Integer level = (user != null) ? user.getLevel() : 1;
 
+        // 6. Masukkan Level ke Response
         return new JwtResponse(jwt,
                 userDetails.getId(),
                 userDetails.getUsername(),
                 userDetails.getEmail(),
                 role,
-                guildId);
+                guildId,
+                level);
     }
 
     // --- REGISTER ---
@@ -77,20 +81,15 @@ public class AuthService {
             throw new Exception("Error: Email is already in use!");
         }
 
-        // 1. Buat User Baru
         User user = new User(signUpRequest.getUsername(),
                 signUpRequest.getEmail(),
                 encoder.encode(signUpRequest.getPassword()));
 
-        // Set Role Default (USER)
         user.setRole(Role.USER);
-
-        // 2. Simpan User ke DB
         User savedUser = userRepository.save(user);
 
-        // 3. Inisialisasi User Stats (Level 1, XP 0)
         UserStats stats = new UserStats();
-        stats.setUserId(savedUser.getId()); // Set ID Manual sesuai User ID
+        stats.setUserId(savedUser.getId());
         stats.setTotalXp(0L);
         stats.setQuestsCompleted(0);
 
