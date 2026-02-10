@@ -17,37 +17,36 @@ import java.util.Date;
 public class JwtUtils {
     private static final Logger logger = LoggerFactory.getLogger(JwtUtils.class);
 
-    // Ambil value dari application.properties
     @Value("${gamesync.app.jwtSecret}")
     private String jwtSecret;
 
     @Value("${gamesync.app.jwtExpirationMs}")
     private int jwtExpirationMs;
 
-    // Membuat Token JWT berdasarkan username user yang login
     public String generateJwtToken(Authentication authentication) {
         UserDetails userPrincipal = (UserDetails) authentication.getPrincipal();
+        return generateTokenFromUsername(userPrincipal.getUsername());
+    }
 
+
+    public String generateTokenFromUsername(String username) {
         return Jwts.builder()
-                .setSubject((userPrincipal.getUsername()))
+                .setSubject(username)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))
                 .signWith(key(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    // Mengambil Key Enkripsi
     private Key key() {
         return Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtSecret));
     }
 
-    // Mengambil Username dari Token JWT
     public String getUserNameFromJwtToken(String token) {
         return Jwts.parserBuilder().setSigningKey(key()).build()
                 .parseClaimsJws(token).getBody().getSubject();
     }
 
-    // Validasi Token (Cek expired, signature, dll)
     public boolean validateJwtToken(String authToken) {
         try {
             Jwts.parserBuilder().setSigningKey(key()).build().parseClaimsJws(authToken);
