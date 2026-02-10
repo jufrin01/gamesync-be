@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -16,7 +17,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-// Pastikan import di bawah ini sesuai dengan struktur folder kamu
+// Pastikan import ini sesuai dengan struktur folder Anda
 import project.gamesync.security.jwt.AuthEntryPointJwt;
 import project.gamesync.security.jwt.AuthTokenFilter;
 import project.gamesync.security.services.UserDetailsServiceImpl;
@@ -24,6 +25,7 @@ import project.gamesync.security.services.UserDetailsServiceImpl;
 import java.util.Arrays;
 
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Autowired
@@ -55,17 +57,19 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // --- SETUP CORS (PENTING UNTUK VERCEL & KOYEB) ---
+    // --- 1. SETUP CORS (JURUS PAMUNGKAS) ---
+    // Ini mengizinkan Frontend dari manapun (Localhost, Vercel, dll) untuk masuk.
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Mengizinkan SEMUA domain (termasuk localhost, vercel, postman, dll)
-        // Ini solusi paling anti-ribet untuk development & production
+        // Gunakan allowedOriginPatterns("*") agar fleksibel untuk semua domain
         configuration.setAllowedOriginPatterns(Arrays.asList("*"));
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
+
+        // Penting: Izinkan kredensial (Cookies/Auth Header)
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -73,6 +77,7 @@ public class SecurityConfig {
         return source;
     }
 
+    // --- 2. SECURITY FILTER CHAIN (ATURAN PINTU MASUK) ---
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -80,12 +85,25 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll() // Login & Register bebas akses
-                        .requestMatchers("/api/test/**").permitAll() // Test API bebas akses
-                        .requestMatchers("/ws/**").permitAll()       // WebSocket wajib permitAll untuk handshake
-                        .requestMatchers("/error").permitAll()       // Halaman error
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll() // Dokumentasi API (jika ada)
-                        .anyRequest().authenticated()                // Sisanya wajib Login
+                        // === A. DAFTAR HALAMAN PUBLIC (Tanpa Login) ===
+
+                        // 1. Auth (Wajib Public agar user bisa masuk)
+                        .requestMatchers("/api/auth/**").permitAll()
+
+                        // 2. WebSocket (Wajib Public untuk handshake)
+                        .requestMatchers("/ws/**").permitAll()
+
+                        // 3. Data Landing Page (Agar halaman depan tidak merah/unauthorized)
+                        // Sesuaikan dengan URL Controller yang Anda pakai di Frontend
+                        .requestMatchers("/api/games/**").permitAll()       // Contoh: List Game
+                        .requestMatchers("/api/chronicles/**").permitAll()  // Contoh: Berita/Chronicle
+                        .requestMatchers("/api/guilds/**").permitAll()      // Contoh: List Guild
+
+                        // 4. Swagger/Error (Opsional)
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/error").permitAll()
+
+                        // === B. DAFTAR HALAMAN PRIVATE (Wajib Login) ===
+                        .anyRequest().authenticated()
                 );
 
         http.authenticationProvider(authenticationProvider());
